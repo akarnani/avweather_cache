@@ -1,6 +1,6 @@
 # Multi-stage build for minimal production image
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache ca-certificates
