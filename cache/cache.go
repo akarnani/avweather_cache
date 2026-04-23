@@ -17,15 +17,15 @@ import (
 
 // Cache holds METAR data in memory
 type Cache struct {
-	mu                   sync.RWMutex
-	data                 map[string]models.METAR
-	sourceURL            string
-	updateInterval       time.Duration
-	lastSuccessfulPull   time.Time
-	lastPullAttempt      time.Time
-	lastPullError        error
-	ctx                  context.Context
-	cancel               context.CancelFunc
+	mu                 sync.RWMutex
+	data               map[string]models.METAR
+	sourceURL          string
+	updateInterval     time.Duration
+	lastSuccessfulPull time.Time
+	lastPullAttempt    time.Time
+	lastPullError      error
+	ctx                context.Context
+	cancel             context.CancelFunc
 }
 
 // New creates a new cache instance
@@ -152,6 +152,14 @@ func (c *Cache) Get(stationIDs []string) []models.METAR {
 	return result
 }
 
+// SetDataForTest replaces the cache contents. Test-only helper so callers
+// outside this package can populate the cache without going through HTTP.
+func (c *Cache) SetDataForTest(data map[string]models.METAR) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data = data
+}
+
 // GetAll returns all METARs in the cache
 func (c *Cache) GetAll() []models.METAR {
 	c.mu.RLock()
@@ -162,6 +170,20 @@ func (c *Cache) GetAll() []models.METAR {
 		result = append(result, metar)
 	}
 	return result
+}
+
+// ForEach iterates every cached METAR under the read lock and invokes fn for
+// each one. Iteration stops early if fn returns false. Callers must not
+// block inside fn — the cache write lock is blocked for the duration of
+// iteration, and concurrent readers can still proceed.
+func (c *Cache) ForEach(fn func(models.METAR) bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, m := range c.data {
+		if !fn(m) {
+			return
+		}
+	}
 }
 
 // Status returns cache status information

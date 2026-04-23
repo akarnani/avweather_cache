@@ -68,4 +68,20 @@ var (
 		Name: "avweather_queries_total",
 		Help: "Total number of API queries",
 	})
+
+	NearestQueries = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "avweather_nearest_queries_total",
+		Help: "Total number of /api/metar/nearest queries",
+	})
+
+	NearestNoMatch = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "avweather_nearest_no_match_total",
+		Help: "Nearest queries that returned no matching station",
+	})
+
+	NearestDistanceMi = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "avweather_nearest_distance_mi",
+		Help:    "Distance in statute miles to the nearest matching station",
+		Buckets: []float64{1, 5, 10, 25, 50, 100, 200, 500},
+	})
 )

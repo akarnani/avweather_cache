@@ -90,6 +90,47 @@ curl "http://localhost:8080/api/metar?stations=KJFK&format=yaml"
 
 Stations that don't meet the age filter or aren't cached are silently omitted (metrics are emitted instead).
 
+### GET /api/metar/nearest
+
+Find the nearest station to a lat/lon point that has a recent METAR within a given radius.
+
+**Parameters (all required except `format`):**
+
+- `lat`: Query latitude, decimal degrees (-90 to 90)
+- `lon`: Query longitude, decimal degrees (-180 to 180)
+- `max_range_mi`: Maximum search radius in statute miles (> 0)
+- `max_age`: Maximum METAR age as a Go duration (e.g. `30m`, `1h30m`, `2h`)
+- `format` (optional): `json` (default) or `yaml`
+
+**Behavior:**
+
+Scans cached stations, filters by age and distance, returns the closest match with a computed `distance_mi` field. If no station meets both criteria, returns **204 No Content** with an empty body.
+
+**Examples:**
+
+```bash
+# Nearest VFR-reporting station within 50mi of downtown Philadelphia, no older than 1h
+curl "http://localhost:8080/api/metar/nearest?lat=39.95&lon=-75.17&max_range_mi=50&max_age=1h"
+
+# Same query in YAML
+curl "http://localhost:8080/api/metar/nearest?lat=39.95&lon=-75.17&max_range_mi=50&max_age=1h&format=yaml"
+```
+
+**Response (200):**
+
+```json
+{
+  "station_id": "KPHL",
+  "latitude": 39.8722,
+  "longitude": -75.2408,
+  "observation_time": "2026-04-22T12:53:00Z",
+  "temp_c": 18.3,
+  "flight_category": "VFR",
+  "...": "...",
+  "distance_mi": 5.7
+}
+```
+
 ## Web Dashboard
 
 Visit `http://localhost:8080/` for a web dashboard showing:
@@ -116,6 +157,9 @@ Prometheus metrics are available at `http://localhost:8080/metrics`
 - `avweather_queries_by_station_total`: Query count per station
 - `avweather_stations_filtered_by_age_total`: Stations filtered due to age
 - `avweather_stations_not_cached_total`: Stations queried but not in cache
+- `avweather_nearest_queries_total`: Total `/api/metar/nearest` queries
+- `avweather_nearest_no_match_total`: Nearest queries returning 204 (no match)
+- `avweather_nearest_distance_mi`: Histogram of matched distances (statute miles)
 
 ## Testing
 

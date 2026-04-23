@@ -53,6 +53,7 @@ func main() {
 	// API endpoints
 	apiHandler := api.New(metarCache)
 	mux.HandleFunc("/api/metar", apiHandler.MetarHandler)
+	mux.HandleFunc("/api/metar/nearest", apiHandler.NearestHandler)
 
 	// Web UI
 	webHandler := webapp.New(metarCache)

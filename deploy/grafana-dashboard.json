@@ -1340,6 +1340,144 @@
       }
     },
     {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Nearest-Station Query Rate",
+      "description": "Rate of /api/metar/nearest requests and no-match responses per minute.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 78
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(avweather_nearest_queries_total[5m]) * 60",
+          "refId": "A",
+          "legendFormat": "queries/min"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(avweather_nearest_no_match_total[5m]) * 60",
+          "refId": "B",
+          "legendFormat": "no-match/min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "gradientMode": "opacity"
+          },
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Nearest No-Match Ratio",
+      "description": "Fraction of /api/metar/nearest queries that returned 204 (no station met the criteria).",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 78
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "rate(avweather_nearest_no_match_total[5m]) / clamp_min(rate(avweather_nearest_queries_total[5m]), 1e-9)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.5, "color": "yellow" },
+              { "value": 0.9, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "heatmap",
+      "title": "Nearest Match Distance (mi)",
+      "description": "Distribution of distances to the matched station for /api/metar/nearest queries.",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 78
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (le) (rate(avweather_nearest_distance_mi_bucket[5m]))",
+          "refId": "A",
+          "format": "heatmap",
+          "legendFormat": "{{le}}"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "short"
+        }
+      }
+    },
+    {
       "id": 20,
       "type": "text",
       "title": "Alert Thresholds and Investigation Guide",
@@ -1347,7 +1485,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 78
+        "y": 86
       },
       "options": {
         "mode": "markdown",
