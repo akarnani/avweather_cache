@@ -3,10 +3,12 @@
 replicaCount: 1
 
 image:
-  repository: akarnani/avweather-cache
+  repository: ghcr.io/akarnani/avweather-cache
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion
   tag: ""
+  # Pinned at release time to sha256:... so the chart references an immutable image
+  digest: ""
 
 imagePullSecrets: []
 nameOverride: ""
