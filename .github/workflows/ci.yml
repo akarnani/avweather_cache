@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
         with:
           go-version: ${{ matrix.go-version }}
 
@@ -32,7 +32,7 @@ jobs:
         run: go test -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
         with:
           file: ./coverage.out
           fail_ci_if_error: false
@@ -43,15 +43,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
         with:
           go-version: '1.23'
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20  # v9.2.0
         with:
           version: latest
 
@@ -59,29 +59,35 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: [test, lint]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
-      - name: Log in to Docker Hub
+      - name: Log in to GHCR
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-        uses: docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/avweather-cache
+          images: ghcr.io/akarnani/avweather-cache
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -89,7 +95,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        id: build
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -98,3 +105,111 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  helm-release:
+    name: Release Helm Chart
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2  # v5.0.0
+        with:
+          version: 'latest'
+
+      - name: Pin image digest into values.yaml
+        env:
+          DIGEST: ${{ needs.docker.outputs.digest }}
+        run: |
+          test -n "$DIGEST"
+          yq -i '.image.digest = strenv(DIGEST)' deploy/charts/avweather-cache/values.yaml
+          grep -A4 '^image:' deploy/charts/avweather-cache/values.yaml
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@cae68fefc6b5f367a0275617c9f83181ba54714f  # v1.7.0
+        with:
+          charts_dir: deploy/charts
+          config: cr.yaml
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Log in to GHCR (Helm)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to GHCR OCI
+        run: |
+          shopt -s nullglob
+          for pkg in .cr-release-packages/*.tgz; do
+            helm push "$pkg" oci://ghcr.io/akarnani/charts
+          done
+
+  helm-oci-main:
+    name: Push Helm Chart to GHCR OCI (main)
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2  # v5.0.0
+        with:
+          version: 'latest'
+
+      - name: Pin image digest into values.yaml
+        env:
+          DIGEST: ${{ needs.docker.outputs.digest }}
+        run: |
+          test -n "$DIGEST"
+          yq -i '.image.digest = strenv(DIGEST)' deploy/charts/avweather-cache/values.yaml
+
+      - name: Determine chart version
+        id: version
+        run: |
+          if git describe --tags --match 'v*' --abbrev=8 >/dev/null 2>&1; then
+            VERSION=$(git describe --tags --match 'v*' --abbrev=8 | sed 's/^v//')
+          else
+            CHART_VER=$(yq '.version' deploy/charts/avweather-cache/Chart.yaml)
+            SHA=$(git rev-parse --short=8 HEAD)
+            VERSION="${CHART_VER}-0.g${SHA}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Chart version: $VERSION"
+
+      - name: Package chart
+        run: |
+          mkdir -p .helm-packages
+          helm package deploy/charts/avweather-cache \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}" \
+            --destination .helm-packages
+
+      - name: Log in to GHCR (Helm)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to GHCR OCI
+        run: |
+          for pkg in .helm-packages/*.tgz; do
+            helm push "$pkg" oci://ghcr.io/akarnani/charts
+          done
