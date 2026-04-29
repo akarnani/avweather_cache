@@ -21,6 +21,10 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # Docker base images
   - package-ecosystem: "docker"
