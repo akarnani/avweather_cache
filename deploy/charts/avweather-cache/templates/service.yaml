@@ -13,3 +13,21 @@ spec:
       name: http
   selector:
     {{- include "avweather-cache.selectorLabels" . | nindent 4 }}
+---
+# Separate ClusterIP service for /metrics so it is never exposed externally
+# even when the main service type is LoadBalancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "avweather-cache.fullname" . }}-metrics
+  labels:
+    {{- include "avweather-cache.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "avweather-cache.selectorLabels" . | nindent 4 }}

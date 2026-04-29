@@ -36,9 +36,14 @@ spec:
             - name: http
               containerPort: {{ .Values.config.server.port }}
               protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.port }}
+              protocol: TCP
           env:
             - name: SERVER_PORT
               value: {{ .Values.config.server.port | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.config.metrics.port | quote }}
             - name: CACHE_UPDATE_INTERVAL
               value: {{ .Values.config.cache.updateInterval | quote }}
             - name: CACHE_SOURCE_URL

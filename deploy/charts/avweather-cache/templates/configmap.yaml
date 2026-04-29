@@ -8,6 +8,8 @@ data:
   config.yaml: |
     server:
       port: {{ .Values.config.server.port }}
+    metrics:
+      port: {{ .Values.config.metrics.port }}
     cache:
       update_interval: {{ .Values.config.cache.updateInterval | quote }}
       source_url: {{ .Values.config.cache.sourceUrl | quote }}

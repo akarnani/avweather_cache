@@ -15,6 +15,13 @@ import (
 	"github.com/andrew/avweather_cache/models"
 )
 
+// Defensive caps for upstream fetches. The aviationweather.gov feed is a few
+// MB compressed and ~100MB decompressed; these are headroom over that.
+const (
+	maxCompressedBytes   int64 = 100 << 20  // 100 MiB
+	maxDecompressedBytes int64 = 1 << 30    // 1 GiB
+)
+
 // Cache holds METAR data in memory
 type Cache struct {
 	mu                 sync.RWMutex
@@ -26,6 +33,7 @@ type Cache struct {
 	lastPullError      error
 	ctx                context.Context
 	cancel             context.CancelFunc
+	client             *http.Client
 }
 
 // New creates a new cache instance
@@ -37,6 +45,7 @@ func New(sourceURL string, updateInterval time.Duration) *Cache {
 		updateInterval: updateInterval,
 		ctx:            ctx,
 		cancel:         cancel,
+		client:         &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -77,7 +86,7 @@ func (c *Cache) update() error {
 	log.Printf("Fetching METAR data from %s", c.sourceURL)
 
 	// Fetch data
-	resp, err := http.Get(c.sourceURL)
+	resp, err := c.client.Get(c.sourceURL)
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()
@@ -92,8 +101,12 @@ func (c *Cache) update() error {
 		return err
 	}
 
+	// Cap compressed bytes read from upstream (defense against a hostile or
+	// misbehaving upstream). The METAR feed is typically a few MB compressed.
+	limited := io.LimitReader(resp.Body, maxCompressedBytes)
+
 	// Decompress gzip
-	gzReader, err := gzip.NewReader(resp.Body)
+	gzReader, err := gzip.NewReader(limited)
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()
@@ -101,8 +114,8 @@ func (c *Cache) update() error {
 	}
 	defer func() { _ = gzReader.Close() }()
 
-	// Read all data
-	data, err := io.ReadAll(gzReader)
+	// Cap decompressed bytes (defense against gzip bombs).
+	data, err := io.ReadAll(io.LimitReader(gzReader, maxDecompressedBytes))
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()

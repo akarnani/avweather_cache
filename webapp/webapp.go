@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -13,6 +14,9 @@ import (
 	"github.com/andrew/avweather_cache/cache"
 	"github.com/andrew/avweather_cache/models"
 )
+
+// Real station IDs are 3-4 chars; cap with headroom for substring searches.
+const maxSearchLen = 32
 
 // Handler handles web UI requests
 type Handler struct {
@@ -28,8 +32,12 @@ func New(c *cache.Cache) *Handler {
 func (h *Handler) SearchHandler(w http.ResponseWriter, r *http.Request) {
 	metars := h.cache.GetAll()
 
-	// Get search query
+	// Get search query (capped to prevent CPU amplification on the
+	// per-station Contains scan).
 	searchQuery := r.URL.Query().Get("search")
+	if len(searchQuery) > maxSearchLen {
+		searchQuery = searchQuery[:maxSearchLen]
+	}
 	var filteredMetars []models.METAR
 
 	// Filter by search if provided
@@ -100,7 +108,8 @@ func (h *Handler) SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, fmt.Sprintf("failed to encode JSON: %v", err), http.StatusInternalServerError)
+		log.Printf("search: encode JSON: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
 
@@ -109,8 +118,12 @@ func (h *Handler) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	status := h.cache.Status()
 	metars := h.cache.GetAll()
 
-	// Get search query
+	// Get search query (capped to prevent CPU amplification on the
+	// per-station Contains scan).
 	searchQuery := r.URL.Query().Get("search")
+	if len(searchQuery) > maxSearchLen {
+		searchQuery = searchQuery[:maxSearchLen]
+	}
 	var filteredMetars []models.METAR
 
 	// Filter by search if provided
@@ -230,7 +243,8 @@ func (h *Handler) IndexHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, fmt.Sprintf("failed to execute template: %v", err), http.StatusInternalServerError)
+		log.Printf("index: execute template: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
 }
 
