@@ -37,7 +37,7 @@ securityContext:
   capabilities:
     drop:
       - ALL
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
 
 service:
   type: LoadBalancer
