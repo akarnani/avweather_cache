@@ -19,6 +19,7 @@ Aviation Weather Cache Service - A Go service that caches METAR data from aviati
 ## Important steps
 
 * Anytime metrics are changed the grafana dashboard in deploy/ should be updated
+* GitHub Actions in workflow files MUST be pinned to a full 40-character commit SHA, never a tag or branch. Format: `uses: owner/repo@<sha>  # v1.2.3`. Tags are mutable and can be force-moved by the action's owner; SHAs are immutable. Resolve a tag to its SHA with `gh api repos/<owner>/<repo>/git/refs/tags/<tag>` (dereference annotated tags via `git/tags/<sha>` if `.object.type` is `tag`).
 
 ## Development Setup
 
