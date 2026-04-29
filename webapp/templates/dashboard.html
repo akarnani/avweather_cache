@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Aviation Weather Cache</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Aviation Weather Cache</h1>
+
+        <div class="info">
+            <strong>API Endpoint:</strong> <code>/api/metar</code> |
+            <strong>Metrics:</strong> <code>/metrics</code> |
+            <strong>Auto-refresh:</strong> Every 30 seconds (no page reload)
+        </div>
+
+        <h2>System Status</h2>
+        <div class="status">
+            <div class="status-card">
+                <div class="status-label">Total Stations</div>
+                <div class="status-value">{{.Status.TotalStations}}</div>
+            </div>
+            <div class="status-card {{if .Status.LastPullError}}error{{else}}success{{end}}">
+                <div class="status-label">Last Successful Pull</div>
+                <div class="status-value">{{formatAge .Status.LastSuccessfulPull}}</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Last Pull Attempt</div>
+                <div class="status-value">{{formatAge .Status.LastPullAttempt}}</div>
+            </div>
+            {{if .Status.LastPullError}}
+            <div class="status-card error">
+                <div class="status-label">Last Error</div>
+                <div class="status-value error-msg">{{.Status.LastPullError.Error}}</div>
+            </div>
+            {{end}}
+        </div>
+
+        <h2>Recent METARs</h2>
+
+        <div class="search-box">
+            <form id="searchForm" method="GET" action="/">
+                <input type="text" name="search" id="searchInput" value="{{.SearchQuery}}" placeholder="Search by station ID (e.g., KJFK, KLAX)..." autocomplete="off">
+            </form>
+            {{if .SearchQuery}}
+            <div class="search-info">
+                Showing {{.MetarCount}} of {{.TotalCount}} stations matching "{{.SearchQuery}}"
+                <a href="#" class="clear-link" data-action="clear-search">Clear Search</a>
+            </div>
+            {{end}}
+        </div>
+
+        <div class="results-info">
+            {{if .SearchQuery}}
+                Showing results {{.StartIdx}}-{{.EndIdx}} of {{.MetarCount}} (Page {{.Page}} of {{.TotalPages}})
+            {{else}}
+                Showing {{.StartIdx}}-{{.EndIdx}} of {{.MetarCount}} stations (Page {{.Page}} of {{.TotalPages}})
+            {{end}}
+        </div>
+
+        <div class="pagination">
+            {{if gt .Page 1}}
+                <a href="#" data-action="load-page" data-page="1">« First</a>
+                <a href="#" data-action="load-page" data-page="{{sub .Page 1}}">‹ Prev</a>
+            {{else}}
+                <span class="disabled">« First</span>
+                <span class="disabled">‹ Prev</span>
+            {{end}}
+
+            <span class="current">Page {{.Page}} of {{.TotalPages}}</span>
+
+            {{if lt .Page .TotalPages}}
+                <a href="#" data-action="load-page" data-page="{{add .Page 1}}">Next ›</a>
+                <a href="#" data-action="load-page" data-page="{{.TotalPages}}">Last »</a>
+            {{else}}
+                <span class="disabled">Next ›</span>
+                <span class="disabled">Last »</span>
+            {{end}}
+        </div>
+
+        <table id="metarTable">
+            <thead>
+                <tr>
+                    <th>Station</th>
+                    <th>Observation Time</th>
+                    <th>Age</th>
+                    <th>Flight Cat</th>
+                    <th>Temp</th>
+                    <th>Wind</th>
+                    <th>Visibility</th>
+                    <th>Raw Text</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Metars}}
+                <tr>
+                    <td><strong>{{.StationID}}</strong></td>
+                    <td>{{formatTime .ObservationTime}}</td>
+                    <td>{{formatAge .ObservationTime}}</td>
+                    <td><span class="flight-cat {{.FlightCategory}}">{{.FlightCategory}}</span></td>
+                    <td>{{formatTemp .TempC}}</td>
+                    <td>{{formatWind .WindDirDegrees .WindSpeedKt .WindGustKt}}</td>
+                    <td>{{.VisibilityMi}}</td>
+                    <td class="raw-text">{{.RawText}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <div class="pagination">
+            {{if gt .Page 1}}
+                <a href="#" data-action="load-page" data-page="1">« First</a>
+                <a href="#" data-action="load-page" data-page="{{sub .Page 1}}">‹ Prev</a>
+            {{else}}
+                <span class="disabled">« First</span>
+                <span class="disabled">‹ Prev</span>
+            {{end}}
+
+            <span class="current">Page {{.Page}} of {{.TotalPages}}</span>
+
+            {{if lt .Page .TotalPages}}
+                <a href="#" data-action="load-page" data-page="{{add .Page 1}}">Next ›</a>
+                <a href="#" data-action="load-page" data-page="{{.TotalPages}}">Last »</a>
+            {{else}}
+                <span class="disabled">Next ›</span>
+                <span class="disabled">Last »</span>
+            {{end}}
+        </div>
+    </div>
+
+    <script src="/static/dashboard.js" defer></script>
+</body>
+</html>

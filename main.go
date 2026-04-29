@@ -56,6 +56,7 @@ func main() {
 	webHandler := webapp.New(metarCache)
 	mux.HandleFunc("/", webHandler.IndexHandler)
 	mux.HandleFunc("/search", webHandler.SearchHandler)
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(webapp.StaticFS()))))
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
@@ -125,6 +126,13 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self'; "+
+				"style-src 'self'; "+
+				"object-src 'none'; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'none'")
 		next.ServeHTTP(w, r)
 	})
 }
