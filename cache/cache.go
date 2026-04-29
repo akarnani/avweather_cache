@@ -26,6 +26,7 @@ type Cache struct {
 	lastPullError      error
 	ctx                context.Context
 	cancel             context.CancelFunc
+	client             *http.Client
 }
 
 // New creates a new cache instance
@@ -37,6 +38,7 @@ func New(sourceURL string, updateInterval time.Duration) *Cache {
 		updateInterval: updateInterval,
 		ctx:            ctx,
 		cancel:         cancel,
+		client:         &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -77,7 +79,7 @@ func (c *Cache) update() error {
 	log.Printf("Fetching METAR data from %s", c.sourceURL)
 
 	// Fetch data
-	resp, err := http.Get(c.sourceURL)
+	resp, err := c.client.Get(c.sourceURL)
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()
