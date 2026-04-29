@@ -449,7 +449,7 @@ const htmlTemplate = `
                 <input type="text" name="search" id="searchInput" value="{{.SearchQuery}}" placeholder="Search by station ID (e.g., KJFK, KLAX)..." autocomplete="off">
             </form>
             {{if .SearchQuery}}
-            <div style="margin-top: 10px; color: #666;">
+            <div class="search-info" style="margin-top: 10px; color: #666;">
                 Showing {{.MetarCount}} of {{.TotalCount}} stations matching "{{.SearchQuery}}"
                 <a href="#" onclick="clearSearch(); return false;" style="margin-left: 10px; color: #007bff; text-decoration: none;">Clear Search</a>
             </div>
@@ -573,21 +573,45 @@ const htmlTemplate = `
             return result;
         }
 
+        function el(tag, opts) {
+            const e = document.createElement(tag);
+            if (!opts) return e;
+            if (opts.text != null) e.textContent = opts.text;
+            if (opts.className) e.className = opts.className;
+            if (opts.onClick) {
+                e.addEventListener('click', (ev) => { ev.preventDefault(); opts.onClick(); });
+            }
+            if (opts.style) Object.assign(e.style, opts.style);
+            if (opts.children) opts.children.forEach(c => c && e.appendChild(c));
+            return e;
+        }
+
+        function clear(node) {
+            while (node.firstChild) node.removeChild(node.firstChild);
+        }
+
         function updateTable(data) {
             const tbody = document.querySelector('#metarTable tbody');
-            tbody.innerHTML = '';
+            clear(tbody);
 
             data.metars.forEach(metar => {
-                const row = document.createElement('tr');
-                row.innerHTML =
-                    '<td><strong>' + (metar.station_id || '') + '</strong></td>' +
-                    '<td>' + formatTime(metar.observation_time) + '</td>' +
-                    '<td>' + formatAge(metar.observation_time) + '</td>' +
-                    '<td><span class="flight-cat ' + (metar.flight_category || '') + '">' + (metar.flight_category || '') + '</span></td>' +
-                    '<td>' + formatTemp(metar.temp_c) + '</td>' +
-                    '<td>' + formatWind(metar.wind_dir_degrees, metar.wind_speed_kt, metar.wind_gust_kt) + '</td>' +
-                    '<td>' + (metar.visibility_statute_mi || '') + '</td>' +
-                    '<td style="font-size: 0.85em;">' + (metar.raw_text || '') + '</td>';
+                const stationCell = el('td', { children: [el('strong', { text: metar.station_id || '' })] });
+                const fc = metar.flight_category || '';
+                const fcCell = el('td', { children: [el('span', { className: 'flight-cat ' + fc, text: fc })] });
+                const rawCell = el('td', { text: metar.raw_text || '', style: { fontSize: '0.85em' } });
+
+                const row = el('tr', {
+                    children: [
+                        stationCell,
+                        el('td', { text: formatTime(metar.observation_time) }),
+                        el('td', { text: formatAge(metar.observation_time) }),
+                        fcCell,
+                        el('td', { text: formatTemp(metar.temp_c) }),
+                        el('td', { text: formatWind(metar.wind_dir_degrees, metar.wind_speed_kt, metar.wind_gust_kt) }),
+                        el('td', { text: metar.visibility_statute_mi || '' }),
+                        rawCell,
+                    ],
+                });
                 tbody.appendChild(row);
             });
 
@@ -596,37 +620,35 @@ const htmlTemplate = `
         }
 
         function updatePagination(data) {
-            const topPagination = document.querySelector('.pagination');
-            const bottomPagination = document.querySelectorAll('.pagination')[1];
-
-            const paginationHTML = generatePaginationHTML(data);
-            topPagination.innerHTML = paginationHTML;
-            bottomPagination.innerHTML = paginationHTML;
+            document.querySelectorAll('.pagination').forEach(p => {
+                clear(p);
+                p.appendChild(buildPagination(data));
+            });
         }
 
-        function generatePaginationHTML(data) {
-            const searchParam = data.search_query ? '&search=' + encodeURIComponent(data.search_query) : '';
-            let html = '';
+        function buildPagination(data) {
+            const frag = document.createDocumentFragment();
+            const link = (text, page) => el('a', { text, onClick: () => loadPage(page) });
+            const disabled = (text) => el('span', { className: 'disabled', text });
 
             if (data.page > 1) {
-                html += '<a href="#" onclick="loadPage(1); return false;">« First</a>';
-                html += '<a href="#" onclick="loadPage(' + (data.page - 1) + '); return false;">‹ Prev</a>';
+                frag.appendChild(link('« First', 1));
+                frag.appendChild(link('‹ Prev', data.page - 1));
             } else {
-                html += '<span class="disabled">« First</span>';
-                html += '<span class="disabled">‹ Prev</span>';
+                frag.appendChild(disabled('« First'));
+                frag.appendChild(disabled('‹ Prev'));
             }
 
-            html += '<span class="current">Page ' + data.page + ' of ' + data.total_pages + '</span>';
+            frag.appendChild(el('span', { className: 'current', text: 'Page ' + data.page + ' of ' + data.total_pages }));
 
             if (data.page < data.total_pages) {
-                html += '<a href="#" onclick="loadPage(' + (data.page + 1) + '); return false;">Next ›</a>';
-                html += '<a href="#" onclick="loadPage(' + data.total_pages + '); return false;">Last »</a>';
+                frag.appendChild(link('Next ›', data.page + 1));
+                frag.appendChild(link('Last »', data.total_pages));
             } else {
-                html += '<span class="disabled">Next ›</span>';
-                html += '<span class="disabled">Last »</span>';
+                frag.appendChild(disabled('Next ›'));
+                frag.appendChild(disabled('Last »'));
             }
-
-            return html;
+            return frag;
         }
 
         function updateResultsInfo(data) {
@@ -637,19 +659,25 @@ const htmlTemplate = `
                 resultsInfo.textContent = 'Showing ' + data.start_idx + '-' + data.end_idx + ' of ' + data.metar_count + ' stations (Page ' + data.page + ' of ' + data.total_pages + ')';
             }
 
-            // Update search info
-            const searchInfo = document.querySelector('.search-box div');
+            const searchBox = document.querySelector('.search-box');
+            let searchInfo = searchBox.querySelector('.search-info');
+
             if (data.search_query) {
-                const infoHTML = 'Showing ' + data.metar_count + ' of ' + data.total_count + ' stations matching "' + data.search_query + '" <a href="#" onclick="clearSearch(); return false;" style="margin-left: 10px; color: #007bff; text-decoration: none;">Clear Search</a>';
                 if (!searchInfo) {
-                    const div = document.createElement('div');
-                    div.style.marginTop = '10px';
-                    div.style.color = '#666';
-                    div.innerHTML = infoHTML;
-                    document.querySelector('.search-box').appendChild(div);
-                } else {
-                    searchInfo.innerHTML = infoHTML;
+                    searchInfo = el('div', { className: 'search-info', style: { marginTop: '10px', color: '#666' } });
+                    searchBox.appendChild(searchInfo);
                 }
+                clear(searchInfo);
+                searchInfo.appendChild(document.createTextNode(
+                    'Showing ' + data.metar_count + ' of ' + data.total_count + ' stations matching "'
+                ));
+                searchInfo.appendChild(el('strong', { text: data.search_query }));
+                searchInfo.appendChild(document.createTextNode('" '));
+                searchInfo.appendChild(el('a', {
+                    text: 'Clear Search',
+                    style: { marginLeft: '10px', color: '#007bff', textDecoration: 'none' },
+                    onClick: clearSearch,
+                }));
             } else if (searchInfo) {
                 searchInfo.remove();
             }
