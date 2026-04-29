@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -115,19 +116,22 @@ func (h *Handler) MetarHandler(w http.ResponseWriter, r *http.Request) {
 	case "json":
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(filteredMetars); err != nil {
-			http.Error(w, fmt.Sprintf("failed to encode JSON: %v", err), http.StatusInternalServerError)
+			log.Printf("metar: encode JSON: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 	case "yaml":
 		w.Header().Set("Content-Type", "application/x-yaml")
 		if err := yaml.NewEncoder(w).Encode(filteredMetars); err != nil {
-			http.Error(w, fmt.Sprintf("failed to encode YAML: %v", err), http.StatusInternalServerError)
+			log.Printf("metar: encode YAML: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv")
 		if err := writeCSV(w, filteredMetars, fields); err != nil {
-			http.Error(w, fmt.Sprintf("failed to write CSV: %v", err), http.StatusInternalServerError)
+			log.Printf("metar: write CSV: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	}
 }
@@ -386,12 +390,14 @@ func (h *Handler) NearestHandler(w http.ResponseWriter, r *http.Request) {
 	case "yaml":
 		w.Header().Set("Content-Type", "application/x-yaml")
 		if err := yaml.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, fmt.Sprintf("failed to encode YAML: %v", err), http.StatusInternalServerError)
+			log.Printf("nearest: encode YAML: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	default:
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			http.Error(w, fmt.Sprintf("failed to encode JSON: %v", err), http.StatusInternalServerError)
+			log.Printf("nearest: encode JSON: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	}
 }

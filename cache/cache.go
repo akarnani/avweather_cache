@@ -15,6 +15,13 @@ import (
 	"github.com/andrew/avweather_cache/models"
 )
 
+// Defensive caps for upstream fetches. The aviationweather.gov feed is a few
+// MB compressed and ~100MB decompressed; these are headroom over that.
+const (
+	maxCompressedBytes   int64 = 100 << 20  // 100 MiB
+	maxDecompressedBytes int64 = 1 << 30    // 1 GiB
+)
+
 // Cache holds METAR data in memory
 type Cache struct {
 	mu                 sync.RWMutex
@@ -94,8 +101,12 @@ func (c *Cache) update() error {
 		return err
 	}
 
+	// Cap compressed bytes read from upstream (defense against a hostile or
+	// misbehaving upstream). The METAR feed is typically a few MB compressed.
+	limited := io.LimitReader(resp.Body, maxCompressedBytes)
+
 	// Decompress gzip
-	gzReader, err := gzip.NewReader(resp.Body)
+	gzReader, err := gzip.NewReader(limited)
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()
@@ -103,8 +114,8 @@ func (c *Cache) update() error {
 	}
 	defer func() { _ = gzReader.Close() }()
 
-	// Read all data
-	data, err := io.ReadAll(gzReader)
+	// Cap decompressed bytes (defense against gzip bombs).
+	data, err := io.ReadAll(io.LimitReader(gzReader, maxDecompressedBytes))
 	if err != nil {
 		c.lastPullError = err
 		metrics.PullErrors.Inc()

@@ -11,12 +11,18 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	Cache  CacheConfig  `yaml:"cache"`
+	Server  ServerConfig  `yaml:"server"`
+	Metrics MetricsConfig `yaml:"metrics"`
+	Cache   CacheConfig   `yaml:"cache"`
 }
 
 // ServerConfig represents server-specific configuration
 type ServerConfig struct {
+	Port int `yaml:"port"`
+}
+
+// MetricsConfig represents Prometheus metrics listener configuration
+type MetricsConfig struct {
 	Port int `yaml:"port"`
 }
 
@@ -32,6 +38,9 @@ func Load(configPath string) (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
 			Port: 8080,
+		},
+		Metrics: MetricsConfig{
+			Port: 9090,
 		},
 		Cache: CacheConfig{
 			UpdateInterval: 5 * time.Minute,
@@ -60,6 +69,14 @@ func Load(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("invalid SERVER_PORT: %w", err)
 		}
 		cfg.Server.Port = p
+	}
+
+	if port := os.Getenv("METRICS_PORT"); port != "" {
+		p, err := strconv.Atoi(port)
+		if err != nil {
+			return nil, fmt.Errorf("invalid METRICS_PORT: %w", err)
+		}
+		cfg.Metrics.Port = p
 	}
 
 	if interval := os.Getenv("CACHE_UPDATE_INTERVAL"); interval != "" {

@@ -47,40 +47,55 @@ func main() {
 		}
 	}()
 
-	// Set up HTTP handlers
+	// Public mux: API + web UI.
 	mux := http.NewServeMux()
-
-	// API endpoints
 	apiHandler := api.New(metarCache)
 	mux.HandleFunc("/api/metar", apiHandler.MetarHandler)
 	mux.HandleFunc("/api/metar/nearest", apiHandler.NearestHandler)
 
-	// Web UI
 	webHandler := webapp.New(metarCache)
 	mux.HandleFunc("/", webHandler.IndexHandler)
 	mux.HandleFunc("/search", webHandler.SearchHandler)
 
-	// Metrics endpoint
-	mux.Handle("/metrics", promhttp.Handler())
-
-	// Create server
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10, // 16 KiB
 	}
 
-	// Start server in a goroutine
+	// Metrics mux: served on a separate listener so an operator can scope
+	// network exposure of /metrics independently of the public API.
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.Handler())
+
+	metricsServer := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Metrics.Port),
+		Handler:           securityHeaders(metricsMux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+	}
+
 	go func() {
 		log.Printf("Server listening on :%d", cfg.Server.Port)
 		log.Printf("Web UI: http://localhost:%d/", cfg.Server.Port)
 		log.Printf("API: http://localhost:%d/api/metar", cfg.Server.Port)
-		log.Printf("Metrics: http://localhost:%d/metrics", cfg.Server.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	go func() {
+		log.Printf("Metrics listening on :%d", cfg.Metrics.Port)
+		log.Printf("Metrics: http://localhost:%d/metrics", cfg.Metrics.Port)
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Metrics server failed: %v", err)
 		}
 	}()
 
@@ -91,13 +106,25 @@ func main() {
 
 	log.Println("Shutting down gracefully...")
 
-	// Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
+	if err := metricsServer.Shutdown(ctx); err != nil {
+		log.Printf("Metrics server shutdown error: %v", err)
+	}
 
 	log.Println("Server stopped")
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
 }
