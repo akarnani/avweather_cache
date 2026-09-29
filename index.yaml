@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   avweather-cache:
   - apiVersion: v2
+    appVersion: 0.0.8
+    created: "2026-09-29T21:09:30.42048632Z"
+    description: Aviation Weather Cache Service - Caches METAR data from aviationweather.gov
+    digest: 27823711255053d94a7d8860dc33cfe70ed10447263a178987abf4c1caab6fcd
+    home: https://github.com/akarnani/avweather_cache
+    keywords:
+    - aviation
+    - weather
+    - metar
+    - cache
+    maintainers:
+    - name: Andrew
+    name: avweather-cache
+    sources:
+    - https://github.com/akarnani/avweather_cache
+    type: application
+    urls:
+    - https://github.com/akarnani/avweather_cache/releases/download/avweather-cache-0.0.8/avweather-cache-0.0.8.tgz
+    version: 0.0.8
+  - apiVersion: v2
     appVersion: 0.0.7
     created: "2026-07-30T19:16:12.314509082Z"
     description: Aviation Weather Cache Service - Caches METAR data from aviationweather.gov
@@ -81,4 +101,4 @@ entries:
     urls:
     - https://github.com/akarnani/avweather_cache/releases/download/avweather-cache-0.0.2/avweather-cache-0.0.2.tgz
     version: 0.0.2
-generated: "2026-07-30T19:16:12.314532867Z"
+generated: "2026-09-29T21:09:30.420496816Z"
