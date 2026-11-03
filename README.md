@@ -399,7 +399,7 @@ that token (or GitHub Actions) to push.
 ### Continuous Integration
 
 On every push and pull request, the CI workflow (`ci.yml`) runs:
-- Tests with Go 1.26 and 1.27 (the Docker image builds with 1.27)
+- Tests and lint with the same Go version as the Docker builder image (read from the `Dockerfile`)
 - Race condition detection
 - Code coverage reporting (Codecov)
 - Linting with golangci-lint
