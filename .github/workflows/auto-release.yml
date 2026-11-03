@@ -1,0 +1,142 @@
+name: Auto Release
+
+# Cuts a patch release (image + Helm chart) automatically when every commit
+# since the last vX.Y.Z tag is a Dependabot patch. If anything else has landed
+# since the last release, it opens (or refreshes) a "release-needed" issue so
+# the release can be cut by hand instead.
+#
+# Triggers:
+#   - push to main: a Dependabot PR merged by a human (or by RELEASE_BOT_TOKEN)
+#   - workflow_dispatch: sent by the CI auto-merge job after it merges a
+#     Dependabot PR with GITHUB_TOKEN (those merges don't fire push events),
+#     or run by hand.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only report what would happen'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Evaluate and release
+    runs-on: ubuntu-latest
+    env:
+      # Optional PAT / app token. When set, the tag push triggers CI on its
+      # own; otherwise CI is dispatched explicitly on the new tag.
+      HAS_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+      GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+      ISSUE_LABEL: release-needed
+      CHART: deploy/charts/avweather-cache/Chart.yaml
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Classify commits since last release
+        id: check
+        env:
+          PUSH_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          COMMITS_FILE: ${{ runner.temp }}/commits.md
+        run: .github/scripts/release-check.sh
+
+      - name: Close stale release-needed issue
+        if: steps.check.outputs.status == 'none' || steps.check.outputs.status == 'patch-only'
+        run: |
+          # Only reachable if a manual release reset the baseline.
+          for n in $(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[].number'); do
+            if [ "${{ inputs.dry_run }}" = "true" ]; then echo "would close #$n"; continue; fi
+            gh issue close "$n" --comment "Resolved: no unreleased non-patch changes remain since ${{ steps.check.outputs.last_tag }}."
+          done
+
+      - name: Cut patch release
+        if: steps.check.outputs.status == 'patch-only' && inputs.dry_run != true
+        env:
+          VERSION: ${{ steps.check.outputs.next_version }}
+          LAST_TAG: ${{ steps.check.outputs.last_tag }}
+          COMMITS_FILE: ${{ runner.temp }}/commits.md
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::${TAG} already exists"; exit 1
+          fi
+
+          sed -i -E "s/^version: .*/version: ${VERSION}/; s/^appVersion: .*/appVersion: \"${VERSION}\"/" "$CHART"
+          git diff --stat
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          {
+            echo "Release ${TAG}"
+            echo
+            echo "Automated patch release. Changes since ${LAST_TAG}:"
+            echo
+            sed -E 's/^- \[x\] \[`([0-9a-f]+)`\]\([^)]*\) /- \1 /' "$COMMITS_FILE"
+          } > "$RUNNER_TEMP/msg.txt"
+          git commit -a -F "$RUNNER_TEMP/msg.txt"
+          git tag -a "$TAG" -m "Release ${TAG} (automated patch release)"
+          git push --atomic origin HEAD:main "refs/tags/${TAG}"
+
+          if [ "$HAS_BOT_TOKEN" != "true" ]; then
+            # Pushes made with GITHUB_TOKEN don't trigger workflows, so start
+            # the image + chart release on the new tag explicitly.
+            gh workflow run ci.yml --ref "$TAG"
+          fi
+
+          {
+            echo "### Released ${TAG}"
+            echo
+            cat "$COMMITS_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Request manual release
+        if: steps.check.outputs.status == 'needs-manual'
+        env:
+          LAST_TAG: ${{ steps.check.outputs.last_tag }}
+          VERSION: ${{ steps.check.outputs.next_version }}
+          COMMITS_FILE: ${{ runner.temp }}/commits.md
+          ASSIGNEE: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Dependency patches have merged to \`main\`, but there are also non-patch changes since **${LAST_TAG:-the last release}**, so they were **not** released automatically."
+            echo
+            echo "Cut a release by hand when ready (bump \`${CHART}\` to the new version and push a \`vX.Y.Z\` tag; see the README). This issue closes itself after the next release."
+            echo
+            echo "### Commits since ${LAST_TAG:-the beginning}"
+            echo
+            cat "$COMMITS_FILE"
+            echo
+            echo "_Last checked by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})._"
+          } > "$RUNNER_TEMP/issue.md"
+          cat "$RUNNER_TEMP/issue.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then exit 0; fi
+
+          gh label create "$ISSUE_LABEL" --color D93F0B \
+            --description "Patches are waiting on a manual release" --force
+          existing=$(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --title "Manual release needed: patches waiting since ${LAST_TAG:-last release}" \
+              --label "$ISSUE_LABEL" --assignee "$ASSIGNEE" --body-file "$RUNNER_TEMP/issue.md"
+          fi
