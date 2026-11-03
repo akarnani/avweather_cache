@@ -7,6 +7,9 @@ on:
       - 'v*.*.*'
   pull_request:
     branches: ['*']
+  # Used by auto-release.yml to build/publish a tag it pushed with GITHUB_TOKEN
+  # (such pushes don't trigger workflows on their own).
+  workflow_dispatch:
 
 jobs:
   test:
@@ -76,7 +79,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Log in to GHCR
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: ghcr.io
@@ -100,7 +103,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+          push: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -213,3 +216,50 @@ jobs:
           for pkg in .helm-packages/*.tgz; do
             helm push "$pkg" oci://ghcr.io/akarnani/charts
           done
+
+  dependabot-automerge:
+    name: Auto-merge Dependabot PR
+    runs-on: ubuntu-latest
+    needs: [test, lint, docker]
+    # Set the repository variable DEPENDABOT_AUTOMERGE=false to turn this off.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      vars.DEPENDABOT_AUTOMERGE != 'false'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98  # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Major version bumps are left for a human to review and merge.
+      - name: Merge PR
+        id: merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          # A PAT/app token with the "workflows" permission is needed to merge
+          # PRs that touch .github/workflows (e.g. GitHub Actions bumps). It
+          # must be added as a Dependabot secret. Without it those PRs fail
+          # here and wait for a manual merge.
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: gh pr merge "$PR_URL" --merge --match-head-commit "$HEAD_SHA"
+
+      - name: Trigger auto-release
+        if: steps.merge.outcome == 'success'
+        env:
+          HAS_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A merge made with a PAT fires a normal push event, which already
+          # runs auto-release.yml; a GITHUB_TOKEN merge does not.
+          if [ "$HAS_BOT_TOKEN" != "true" ]; then
+            gh workflow run auto-release.yml --ref main -R "$GITHUB_REPOSITORY"
+          fi

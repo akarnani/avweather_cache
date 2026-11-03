@@ -1,4 +1,7 @@
 version: 2
+# Patch PRs from here are auto-merged by CI (except semver-major bumps) and
+# then released automatically by .github/workflows/auto-release.yml when no
+# other changes are pending release.
 updates:
   # Go dependencies
   - package-ecosystem: "gomod"
@@ -10,6 +13,11 @@ updates:
     labels:
       - "dependencies"
       - "go"
+    groups:
+      go-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -26,7 +34,8 @@ updates:
         patterns:
           - "*"
 
-  # Docker base images
+  # Docker base images (pinned by digest in the Dockerfile, so upstream
+  # security rebuilds of the same tag also produce PRs)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -36,3 +45,7 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
