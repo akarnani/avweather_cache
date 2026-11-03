@@ -354,34 +354,52 @@ Configure the following secrets in your GitHub repository (Settings → Secrets 
 
 ### Release Process
 
-Releases are triggered automatically when you push a semantic version tag:
+A release is a commit that bumps `version`/`appVersion` in
+`deploy/charts/avweather-cache/Chart.yaml`, tagged `vX.Y.Z`:
 
 ```bash
-# Tag the release
+# after bumping Chart.yaml to 1.0.0 and committing on main
 git tag v1.0.0
-git push origin v1.0.0
+git push origin main v1.0.0
 ```
 
-This triggers three workflows that run in parallel:
+The tag runs `ci.yml`, which builds and pushes the multi-arch image to
+`ghcr.io/akarnani/avweather-cache` (tags `1.0.0`, `1.0`, `1`), pins its digest
+into the chart, and publishes the chart to GitHub Pages
+(`https://akarnani.github.io/avweather_cache`) and `oci://ghcr.io/akarnani/charts`.
 
-1. **Docker Workflow** (`docker.yml`):
-   - Builds multi-arch images: `linux/amd64`, `linux/arm64`
-   - Pushes to Docker Hub with tags: `v1.0.0`, `v1.0`, `v1`, `latest`
+### Automated Patching
 
-2. **Release Workflow** (`release.yml`):
-   - Builds native binaries for all platforms (darwin/amd64, darwin/arm64, linux/amd64, linux/arm64)
-   - Generates SHA256 checksums
-   - Creates GitHub Release with binaries attached
+- **Dependabot** (`.github/dependabot.yml`) opens weekly PRs for Go modules,
+  GitHub Actions, and the Docker base images. Base images are pinned by digest
+  in the `Dockerfile`, so upstream security rebuilds of the same tag also get a PR.
+- **Auto-merge**: once CI passes on a Dependabot PR, the `dependabot-automerge`
+  job in `ci.yml` merges it. Semver-major bumps are left for manual review.
+  Set the repository variable `DEPENDABOT_AUTOMERGE=false` to disable.
+- **Auto-release** (`auto-release.yml`): after a Dependabot PR merges, the
+  commits since the last `vX.Y.Z` tag are checked by
+  `.github/scripts/release-check.sh`.
+  - If **every** commit is a Dependabot patch, the next patch version is
+    released automatically (Chart.yaml bump, tag, image and chart publish).
+  - If anything else is unreleased, nothing is released and an issue labelled
+    `release-needed` is opened (or refreshed) and assigned to the repo owner.
+    It closes itself after the next release.
+  - Run it by hand (with an optional dry run) from the Actions tab.
 
-3. **Helm Release Workflow** (`helm-release.yml`):
-   - Packages Helm chart
-   - Publishes to GitHub Pages at `https://akarnani.github.io/avweather_cache`
-   - Updates Helm repository index
+**Optional `RELEASE_BOT_TOKEN` secret.** Everything works with the default
+`GITHUB_TOKEN`, except that GitHub won't let that token merge PRs that change
+`.github/workflows/` (the GitHub Actions bumps); those wait for a manual merge,
+which still triggers the auto-release. To auto-merge them too, create a
+fine-grained token for this repo with read/write on Contents, Pull requests,
+Issues, Actions and Workflows, and add it as `RELEASE_BOT_TOKEN` under both
+**Actions** and **Dependabot** secrets. The auto-release also pushes the
+release commit straight to `main`, so branch protection on `main` must allow
+that token (or GitHub Actions) to push.
 
 ### Continuous Integration
 
 On every push and pull request, the CI workflow (`ci.yml`) runs:
-- Tests with Go 1.22 and 1.23
+- Tests with Go 1.26 and 1.27 (the Docker image builds with 1.27)
 - Race condition detection
 - Code coverage reporting (Codecov)
 - Linting with golangci-lint
