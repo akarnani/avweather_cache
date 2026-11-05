@@ -16,7 +16,7 @@ import (
 	"github.com/andrew/avweather_cache/cache"
 	"github.com/andrew/avweather_cache/metrics"
 	"github.com/andrew/avweather_cache/models"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Earth radius in statute miles, used for haversine and bounding-box math.
@@ -302,7 +302,7 @@ func getFieldValue(metar models.METAR, fieldName string) string {
 }
 
 // nearestResponse embeds METAR and adds the computed distance.
-// The yaml:",inline" tag is required because yaml.v3 (unlike encoding/json)
+// The yaml:",inline" tag is required because go.yaml.in/yaml/v3 (unlike encoding/json)
 // does not auto-flatten anonymous fields.
 type nearestResponse struct {
 	models.METAR `yaml:",inline"`

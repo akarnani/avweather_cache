@@ -11,7 +11,7 @@ import (
 
 	"github.com/andrew/avweather_cache/cache"
 	"github.com/andrew/avweather_cache/models"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func setupTestCache() *cache.Cache {
