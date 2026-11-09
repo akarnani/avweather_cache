@@ -2,8 +2,8 @@ apiVersion: v2
 name: avweather-cache
 description: Aviation Weather Cache Service - Caches METAR data from aviationweather.gov
 type: application
-version: 0.0.11
-appVersion: "0.0.11"
+version: 0.0.12
+appVersion: "0.0.12"
 keywords:
   - aviation
   - weather
