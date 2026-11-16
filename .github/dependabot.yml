@@ -10,6 +10,11 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # Version updates only cover direct dependencies by default. Every module
+    # in go.mod except client_golang and yaml is "// indirect", so without
+    # this Dependabot never bumps prometheus/common, procfs, x/sys, etc.
+    allow:
+      - dependency-type: "all"
     labels:
       - "dependencies"
       - "go"
