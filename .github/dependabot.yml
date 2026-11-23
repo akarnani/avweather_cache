@@ -2,6 +2,7 @@ version: 2
 # Patch PRs from here are auto-merged by CI (except semver-major bumps) and
 # then released automatically by .github/workflows/auto-release.yml when no
 # other changes are pending release.
+# Review requests for these PRs come from .github/CODEOWNERS.
 updates:
   # Go dependencies
   - package-ecosystem: "gomod"
@@ -15,6 +16,8 @@ updates:
     # this Dependabot never bumps prometheus/common, procfs, x/sys, etc.
     allow:
       - dependency-type: "all"
+    assignees:
+      - "akarnani"
     labels:
       - "dependencies"
       - "go"
@@ -31,6 +34,8 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    assignees:
+      - "akarnani"
     labels:
       - "dependencies"
       - "github-actions"
@@ -47,6 +52,8 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    assignees:
+      - "akarnani"
     labels:
       - "dependencies"
       - "docker"
