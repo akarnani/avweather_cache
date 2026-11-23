@@ -1,4 +1,0 @@
-# Request review from the maintainer on every pull request, including the
-# ones Dependabot opens. (Dependabot's own `reviewers` option was retired in
-# favor of CODEOWNERS.)
-* @akarnani
