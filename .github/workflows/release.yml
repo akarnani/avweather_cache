@@ -1,0 +1,97 @@
+name: Release
+
+# Cut a release by hand from the Actions tab (Run workflow): bumps the chart's
+# version/appVersion on main, tags vX.Y.Z, and publishes the image and Helm
+# chart through ci.yml. Closes any open release-needed / release-failed issue.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the version to bump'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: 'Exact version instead (X.Y.Z, optional; overrides bump)'
+        type: string
+        required: false
+      dry_run:
+        description: 'Only show what would be released'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    env:
+      HAS_BOT_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+      GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+      DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Set up paths
+        run: echo "COMMITS_FILE=${RUNNER_TEMP}/commits.md" >> "$GITHUB_ENV"
+
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: List commits since last release
+        id: check
+        run: .github/scripts/release-check.sh
+
+      - name: Pick version
+        id: version
+        env:
+          LAST_TAG: ${{ steps.check.outputs.last_tag }}
+          BUMP: ${{ inputs.bump }}
+          EXPLICIT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$EXPLICIT" ]; then
+            version=${EXPLICIT#v}
+          elif [ -z "$LAST_TAG" ]; then
+            echo "::error::No vX.Y.Z tag yet; give an exact version."; exit 1
+          else
+            IFS=. read -r major minor patch <<< "${LAST_TAG#v}"
+            case $BUMP in
+              major) version="$((major + 1)).0.0" ;;
+              minor) version="${major}.$((minor + 1)).0" ;;
+              *)     version="${major}.${minor}.$((patch + 1))" ;;
+            esac
+          fi
+          if [ "${{ steps.check.outputs.status }}" = "none" ]; then
+            echo "::warning::No commits since ${LAST_TAG}; releasing anyway."
+          fi
+          echo "Releasing ${LAST_TAG:-(none)} -> v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cut release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          LAST_TAG: ${{ steps.check.outputs.last_tag }}
+          RELEASE_KIND: manual ${{ inputs.version != '' && 'release' || format('{0} release', inputs.bump) }}
+        run: .github/scripts/cut-release.sh
+
+      - name: Close release issues
+        env:
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          msg="Resolved: ${TAG} was released by [this run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+          .github/scripts/release-issue.sh close release-needed "$msg"
+          .github/scripts/release-issue.sh close release-failed "$msg"
