@@ -240,6 +240,8 @@ jobs:
     name: Auto-merge Dependabot PR
     runs-on: ubuntu-latest
     needs: [test, lint, docker]
+    outputs:
+      merged: ${{ steps.merge.outcome }}
     # Set the repository variable DEPENDABOT_AUTOMERGE=false to turn this off.
     if: >-
       github.event_name == 'pull_request' &&
@@ -282,3 +284,31 @@ jobs:
           if [ "$HAS_BOT_TOKEN" != "true" ]; then
             gh workflow run auto-release.yml --ref main -R "$GITHUB_REPOSITORY"
           fi
+
+  # Ask the maintainer to review any Dependabot PR that was not auto-merged:
+  # major bumps, PRs whose CI failed, and PRs the merge step could not merge.
+  # Auto-merged patch/minor bumps produce no review request.
+  dependabot-request-review:
+    name: Request review on Dependabot PR
+    runs-on: ubuntu-latest
+    needs: [test, lint, docker, dependabot-automerge]
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      needs.dependabot-automerge.outputs.merged != 'success'
+    permissions:
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Request review and assign
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEWER: akarnani
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/requested_reviewers" \
+            -f "reviewers[]=$REVIEWER" > /dev/null
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/assignees" \
+            -f "assignees[]=$REVIEWER" > /dev/null

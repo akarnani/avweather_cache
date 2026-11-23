@@ -2,6 +2,8 @@ version: 2
 # Patch PRs from here are auto-merged by CI (except semver-major bumps) and
 # then released automatically by .github/workflows/auto-release.yml when no
 # other changes are pending release.
+# PRs that are not auto-merged (major bumps, failed CI, failed merge) get a
+# review request from the dependabot-request-review job in ci.yml.
 updates:
   # Go dependencies
   - package-ecosystem: "gomod"
