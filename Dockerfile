@@ -1,7 +1,7 @@
 # Multi-stage build for minimal production image
 # Build stage. Runs on the CI runner's native platform and cross-compiles for
 # the target, so the arm64 image isn't built under QEMU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 # Runtime stage - distroless for security
 # Base images are pinned by digest so Dependabot opens a PR (and an automated
 # patch release follows) whenever upstream publishes a rebuilt image.
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 
 # Copy CA certificates from builder
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
