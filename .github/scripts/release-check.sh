@@ -2,8 +2,10 @@
 # Decide whether main can be released automatically.
 #
 # A release is automatic only when every commit since the latest vX.Y.Z tag
-# is a dependency/base-image patch, i.e. authored by Dependabot (or a merge
-# commit of a Dependabot PR). Anything else needs a human to cut the release.
+# is a dependency/base-image patch, i.e. authored by Dependabot. Merge commits
+# ("Merge pull request #N ...") are neutral: they carry no changes of their
+# own, and the commits they bring in are judged individually. Anything else
+# needs a human to cut the release.
 #
 # Writes these key=value lines to $GITHUB_OUTPUT (or stdout):
 #   status        none | patch-only | needs-manual | skip
@@ -25,19 +27,19 @@ OUT=${GITHUB_OUTPUT:-/dev/stdout}
 REPO_URL=${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-akarnani/avweather_cache}
 
 BOT_EMAIL_RE='dependabot\[bot\]@users\.noreply\.github\.com$'
-BOT_MERGE_RE='^Merge pull request #[0-9]+ from [^ ]+/dependabot/'
 
 emit() { echo "$1=$2" >> "$OUT"; }
 
-is_patch_commit() {
-  local sha=$1 email subject parents
-  email=$(git log -1 --format='%ae' "$sha")
-  subject=$(git log -1 --format='%s' "$sha")
+# Prints "merge", "patch" or "other".
+classify_commit() {
+  local sha=$1 parents
   parents=$(git log -1 --format='%p' "$sha" | wc -w)
   if [[ $parents -gt 1 ]]; then
-    [[ $subject =~ $BOT_MERGE_RE ]]
+    echo merge
+  elif [[ $(git log -1 --format='%ae' "$sha") =~ $BOT_EMAIL_RE ]]; then
+    echo patch
   else
-    [[ $email =~ $BOT_EMAIL_RE ]]
+    echo other
   fi
 }
 
@@ -72,18 +74,19 @@ if [[ ${#shas[@]} -eq 0 ]]; then
   exit 0
 fi
 
-status=patch-only
+status="patch-only"
 : > "$COMMITS_FILE"
 for sha in "${shas[@]}"; do
-  line=$(git log -1 --format='%h %s (%an)' "$sha")
-  if is_patch_commit "$sha"; then
-    echo "  patch  $line"
-    echo "- [x] [\`${sha:0:7}\`](${REPO_URL}/commit/${sha}) $(git log -1 --format='%s (%an)' "$sha")" >> "$COMMITS_FILE"
-  else
-    echo "  OTHER  $line"
-    echo "- [ ] [\`${sha:0:7}\`](${REPO_URL}/commit/${sha}) $(git log -1 --format='%s (%an)' "$sha") **(not a patch)**" >> "$COMMITS_FILE"
-    status=needs-manual
-  fi
+  kind=$(classify_commit "$sha")
+  desc=$(git log -1 --format='%s (%an)' "$sha")
+  link="[\`${sha:0:7}\`](${REPO_URL}/commit/${sha})"
+  printf '  %-6s %s %s\n' "$kind" "${sha:0:7}" "$desc"
+  case $kind in
+    patch) echo "- [x] ${link} ${desc}" >> "$COMMITS_FILE" ;;
+    merge) echo "- [x] ${link} ${desc} _(merge)_" >> "$COMMITS_FILE" ;;
+    *)     echo "- [ ] ${link} ${desc} **(not a patch)**" >> "$COMMITS_FILE"
+           status=needs-manual ;;
+  esac
 done
 
 echo "Since ${last_tag}: ${#shas[@]} commit(s), status=${status}, next=v${next_version}"

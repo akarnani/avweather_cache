@@ -355,7 +355,14 @@ Configure the following secrets in your GitHub repository (Settings → Secrets 
 ### Release Process
 
 A release is a commit that bumps `version`/`appVersion` in
-`deploy/charts/avweather-cache/Chart.yaml`, tagged `vX.Y.Z`:
+`deploy/charts/avweather-cache/Chart.yaml`, tagged `vX.Y.Z`. The easiest way
+to cut one is the **Release** workflow (`release.yml`): Actions → Release →
+**Run workflow**, pick `patch`/`minor`/`major` (or type an exact version), and
+optionally tick dry run to preview. It bumps the chart, commits and tags on
+`main`, starts the publish, and closes any open `release-needed` /
+`release-failed` issue.
+
+By hand, the equivalent is:
 
 ```bash
 # after bumping Chart.yaml to 1.0.0 and committing on main
@@ -378,13 +385,19 @@ into the chart, and publishes the chart to GitHub Pages
   Set the repository variable `DEPENDABOT_AUTOMERGE=false` to disable.
 - **Auto-release** (`auto-release.yml`): after a Dependabot PR merges, the
   commits since the last `vX.Y.Z` tag are checked by
-  `.github/scripts/release-check.sh`.
-  - If **every** commit is a Dependabot patch, the next patch version is
+  `.github/scripts/release-check.sh`. Merge commits (`Merge pull request #N
+  ...`) are ignored; the commits they bring in are judged on their own.
+  - If **every** other commit is a Dependabot patch, the next patch version is
     released automatically (Chart.yaml bump, tag, image and chart publish).
   - If anything else is unreleased, nothing is released and an issue labelled
-    `release-needed` is opened (or refreshed) and assigned to the repo owner.
-    It closes itself after the next release.
+    `release-needed` is opened and assigned to the repo owner; later runs
+    refresh it and comment so the owner is notified again. It closes itself
+    after the next release.
   - Run it by hand (with an optional dry run) from the Actions tab.
+- **Failure alerts**: if the auto-release run fails, or CI on a release tag
+  fails to publish the image or chart, an issue labelled `release-failed` is
+  opened (or commented on) and assigned to the repo owner. It closes itself
+  after the next successful release.
 
 **Optional `RELEASE_BOT_TOKEN` secret.** Everything works with the default
 `GITHUB_TOKEN`, except that GitHub won't let that token merge PRs that change
