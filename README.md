@@ -381,7 +381,9 @@ into the chart, and publishes the chart to GitHub Pages
   GitHub Actions, and the Docker base images. Base images are pinned by digest
   in the `Dockerfile`, so upstream security rebuilds of the same tag also get a PR.
 - **Auto-merge**: once CI passes on a Dependabot PR, the `dependabot-automerge`
-  job in `ci.yml` merges it. Semver-major bumps are left for manual review.
+  job in `ci.yml` merges it. Semver-major bumps are left for manual review;
+  Docker updates that only change an image's `@sha256` digest (same tag) count
+  as patches, even though Dependabot's metadata reports them as major.
   Set the repository variable `DEPENDABOT_AUTOMERGE=false` to disable.
 - **Auto-release** (`auto-release.yml`): after a Dependabot PR merges, the
   commits since the last `vX.Y.Z` tag are checked by

@@ -295,10 +295,35 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # fetch-metadata misreads digest-only Docker bumps (same tag, new
+      # @sha256 digest) as semver-major, e.g. "`fa3d596`" -> "1.27-alpine".
+      # Those are upstream rebuilds of the same version, so treat them as
+      # patches: every changed line must differ only in its digest.
+      - name: Detect digest-only update
+        id: digest
+        if: steps.meta.outputs.package-ecosystem == 'docker'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          gh pr diff "$PR_URL" > "$RUNNER_TEMP/pr.diff"
+          changed() { grep -E "^[$1][^$1]" "$RUNNER_TEMP/pr.diff" | cut -c2- || true; }
+          strip() { sed -E 's/@sha256:[0-9a-f]{64}//g' | sort; }
+          removed=$(changed -); added=$(changed +)
+          digest_only=false
+          if [ -n "$removed" ] && [ -n "$added" ] &&
+             ! printf '%s\n%s\n' "$removed" "$added" | grep -qv '@sha256:' &&
+             [ "$(strip <<< "$removed")" = "$(strip <<< "$added")" ]; then
+            digest_only=true
+          fi
+          echo "digest-only=${digest_only}"
+          echo "digest_only=${digest_only}" >> "$GITHUB_OUTPUT"
+
       # Major version bumps are left for a human to review and merge.
       - name: Merge PR
         id: merge
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        if: steps.meta.outputs.update-type != 'version-update:semver-major' || steps.digest.outputs.digest_only == 'true'
         env:
           # A PAT/app token with the "workflows" permission is needed to merge
           # PRs that touch .github/workflows (e.g. GitHub Actions bumps). It
